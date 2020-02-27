@@ -12,13 +12,13 @@ class LogLoader:
         '''
         # Load log file
         file_data = np.genfromtxt(filename, delimiter=',', skip_header = 2)
-        f = open(filename, "rb")
+        f = open(filename, "r")
         reader = csv.reader(f)
-        self.log_info = reader.next()
+        self.log_info = reader.__next__()
         self.log_name = self.log_info[0].replace('Robot Log: ', '')
         self.filename = os.path.basename(filename)
         # Get header list - keep it to have an ordered list along with the keys.
-        self.headers = reader.next()
+        self.headers = reader.__next__()
         f.close()
 
         # Format data in a dictionnary.

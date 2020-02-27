@@ -33,10 +33,10 @@ class Claptrap():
         self.meshcat_viewer = meshcat_viewer 
         self.controller = controller
         
-        self.robot = se3.RobotWrapper.BuildFromURDF("urdf/claptrap.urdf", ["urdf/"], root_joint=se3.JointModelFreeFlyer())
+        self.robot = se3.RobotWrapper.BuildFromURDF("urdf/claptrap.urdf", ["urdf/"], root_joint=None)
         
         # Compute wheel radius vector.
-        self.wheel_radius = self.robot.model.frames[self.robot.model.getFrameId("RimJoint")].placement.translation
+        self.wheel_radius = self.robot.model.jointPlacements[self.robot.model.getJointId("BodyJoint")].translation[2, 0]
         
         # Current robot state
         if initial_state is not None:
@@ -44,7 +44,6 @@ class Claptrap():
             self.v = initial_state[1]
         else:
             self.q = self.robot.q0
-            self.q[:3, 0] = self.wheel_radius
             self.v = np.matrix(np.zeros((self.robot.nv, 1)))
             
         # Initialize viewer if needed.
@@ -65,7 +64,7 @@ class Claptrap():
         # Extract data from solver
         self.q = np.matrix(self.solver.y[:self.robot.nq])
         # Renormalize quaternion to prevent propagation of rounding errors due to integration.
-        self.q[3:7, 0] /= np.linalg.norm(self.q[3:7, 0])
+        # ~ self.q[3:7, 0] /= np.linalg.norm(self.q[3:7, 0])
         self.v = np.matrix(self.solver.y[self.robot.nq:])
         self.tau = self.controller(t, self.q, self.v, None, None, None)
         return self.solver.successful()
@@ -78,55 +77,55 @@ class Claptrap():
         q = np.matrix(x[:self.robot.nq]).T
         v = np.matrix(x[self.robot.nq:]).T
         # Renormalize quaternion to prevent propagation of rounding errors due to integration.
-        q[3:7, 0] /= np.linalg.norm(q[3:7, 0])
+        # ~ q[3:7, 0] /= np.linalg.norm(q[3:7, 0])
         
         # Run forward dynamic computation
         # Compute H and g + coloriolis effects
         H =  self.robot.mass(q)
         g = self.robot.nle(q, v)
         
-        # Compute jacobian
-        # Note that the jacobian only depends on data directly available in q, v, so there is no need for advanced
-        # computation
-        radius_world =  se3.Quaternion(q[6, 0], q[3, 0], q[4, 0], q[5, 0]).conjugate() * self.wheel_radius
-        omega = v[3:6, 0]
-        skew_radius = skew_symmetric(radius_world)
-        omega_skew_radius = skew_symmetric(- skew_symmetric(omega) * radius_world)
-        
-        J = np.concatenate((np.eye(3), skew_radius, skew_radius * np.matrix([[0, 1, 0]]).T), axis=1)
-        dJ = np.concatenate((np.zeros((3,3)), omega_skew_radius, omega_skew_radius * np.matrix([[0, 1, 0]]).T), axis=1)
-        drift = -dJ * v
+        # Compute contact jacobian and derivative (drift).
+        # Since q = (x y gamma beta alpha theta) where (alpha beta gamma) are RPY angles of the base,
+        # the contact implies that in the YawLink frame (after rotation by gamma), we have vx = R (dalpha + dtheta)
+        # and vy = 0
+        gamma = q[2, 0]
+        J = np.matrix([[np.cos(gamma), np.sin(gamma), 0, 0, -self.wheel_radius, -self.wheel_radius],
+                       [-np.sin(gamma), np.cos(gamma), 0, 0, 0, 0]])
+        dJ = np.matrix([[-np.sin(gamma), np.cos(gamma), 0, 0, 0, 0],
+                       [-np.cos(gamma), -np.sin(gamma), 0, 0, 0, 0]]) * v[2, 0]
+        drift = -  dJ * v
         
         # Compute controller torque
         torque = np.zeros((self.robot.model.nv, 1))
-        # Consider all joints actuated except freeflyer
-        torque[6:, 0] = self.controller(t, q, v, None, None, None)
+
+        torque[5, 0] = self.controller(t, q, v, None, None, None)
         # Write full equation
-        A = np.block([[H, J.T], [J, np.zeros((3,3))]]) 
-        # ~ b = np.concatenate((torque - g, drift))
+        A = np.block([[H, J.T], [J, np.zeros((2, 2))]]) 
         b = np.concatenate((torque - g, drift))
-        
         # Find dv
-        dv = np.linalg.solve(A, b)[:-3]
+        dv = np.linalg.solve(A, b)[:-2]
+        # ~ print(v, dv)
+        # ~ dv = np.linalg.solve(H, torque)[:-3]
+        # ~ dv = np.linalg.solve(H, torque - g)
         
         # Now we just need to integrate dv
         # The slight issue is that q is not a term-by-term integral of v (because of the freeflyer).
         # Here we use pinocchio's integrate funciton to compute the numerical derivative of q
-        dt = 1e-6
-        dq = ((se3.integrate(self.robot.model, q, dt * v) - q)/ dt)
+        # ~ dt = 1e-6
+        # ~ dq = ((se3.integrate(self.robot.model, q, dt * v) - q)/ dt)
         
-        return np.concatenate((dq, dv))
+        return np.concatenate((v, dv))
     
     def log_state(self, logger, prefix):
         '''Log current state: the values logged are defined in CLAPTRAP_STATE_SUFFIXES
         @param logger Logger object
         @param prefix Prefix to add before each suffix.
         '''
-        rpy = se3.rpy.matrixToRpy(se3.Quaternion(self.q[6, 0], self.q[3, 0], self.q[4, 0], self.q[5, 0]).matrix())
-        logger.set(prefix + "roll", rpy[0,0])
-        logger.set(prefix + "pitch", rpy[1,0])
-        logger.set(prefix + "yaw", rpy[2,0])
-        logger.set_vector(prefix + "omega", self.v[3:6, 0])
+        logger.set(prefix + "roll", self.q[3, 0])
+        logger.set(prefix + "pitch", self.q[4,0])
+        logger.set(prefix + "yaw", self.q[2, 0])
+        # TODO
+        # ~ logger.set_vector(prefix + "omega", self.v[3:6, 0])
         logger.set(prefix + "wheelVelocity", self.v[self.robot.model.joints[self.robot.model.getJointId("WheelJoint")].idx_v, 0])
         
         se3.computeAllTerms(self.robot.model, self.robot.data, self.q, self.v)

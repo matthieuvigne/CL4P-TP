@@ -8,10 +8,7 @@ import meshcat
 from meshcat.animation import Animation
 
 # Parameters
-# ~ simulation_length = 20.0
-# ~ simulation_length = 5.0
-# ~ simulation_length = 5.0
-simulation_length = 10.0
+simulation_length = 5.0
 dt = 0.010
 refresh_rate = 2 # Refresh the display every n itertion.
 
@@ -23,10 +20,15 @@ def zero_torque_controller(t, q, v, q_ref, v_ref, a_ref):
     return np.zeros((1,1)) 
     
 # PD controller on base angle
-Kp = 150
-Kd = 0.01
+# ~ Kp = 150
+# ~ Kp = 50
+Kp = 0
+Kd = 0.002
 def pd_controller(t, q, v, q_ref, v_ref, a_ref):
-    pitch = se3.rpy.matrixToRpy(se3.Quaternion(q[6, 0], q[3, 0], q[4, 0], q[5, 0]).matrix())[1, 0]
+    # ~ pitch = se3.rpy.matrixToRpy(se3.Quaternion(q[6, 0], q[3, 0], q[4, 0], q[5, 0]).matrix())[1, 0]
+    # ~ dpitch = v[4, 0]
+    pitch = q[4, 0]
+    # ~ dpitch = v[4, 0]
     dpitch = v[4, 0]
     
     u = - np.matrix([[Kp * (pitch + Kd * dpitch)]])
@@ -45,10 +47,10 @@ claptraps["ZeroTorque"] = Claptrap(zero_torque_controller, meshcat_viewer=viewer
 claptraps["PD"] = Claptrap(pd_controller, meshcat_viewer=viewer, meshcat_name = "PD", robot_color = np.array([0.0, 1.0, 0.0, 1.0]))
 
 # Set initial state
-quat = se3.Quaternion(se3.rpy.rpyToMatrix(np.matrix([[0.0, 0.2, 0.0]]).T))
 for c in claptraps:
-    claptraps[c].q[3:7, 0] = quat.coeffs()
-    claptraps[c].q[:3, 0] = claptraps[c].wheel_radius
+    claptraps[c].q[2, 0] = 0.0 # Yaw
+    claptraps[c].q[3, 0] = 0.1 # Roll
+    claptraps[c].q[4, 0] = 0.0 # Pitch
     claptraps[c].solver.set_initial_value(np.concatenate((claptraps[c].q, claptraps[c].v)))
 
 # Initialize logger
