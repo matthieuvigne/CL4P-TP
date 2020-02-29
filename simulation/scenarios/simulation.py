@@ -1,11 +1,12 @@
 # Run a simulation of claptrap
-from logger import Logger
-from claptrap import Claptrap, CLAPTRAP_STATE_SUFFIXES
 import sys
 import pinocchio as se3
 import numpy as np
 import meshcat
 from meshcat.animation import Animation
+
+from claptrap_simu.core.claptrap import Claptrap, CLAPTRAP_STATE_SUFFIXES
+from claptrap_simu.log_handling.logger import Logger
 
 # Parameters
 simulation_length = 5.0

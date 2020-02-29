@@ -1,22 +1,20 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 '''
-    Plot a csv log file using matplotlib.
+    Plot data from a csv log file using matplotlib.
     See inline help for more info.
 '''
 
-from log_loader import LogLoader
 import argparse
 import os
-
 import sys
 import numpy as np
 import matplotlib.pyplot as plt
-
 from fnmatch import filter
 
-if __name__ == "__main__":
+from .log_loader import LogLoader
 
+def main():
     description_str = "Plot data from a csv log file.\n" + \
                       "Specify a list of headers, separated by a colon for plotting on the same subplot.\n" + \
                       "Example: h1 h2:h3 generates two subplots, one with h1, one with h2 and h3.\n"
@@ -89,3 +87,6 @@ if __name__ == "__main__":
         ax.grid()
     plt.subplots_adjust(bottom=0.05, top=0.92, left=0.06, right=0.98, wspace=0.1, hspace=0.05)
     plt.show()
+
+if __name__ == "__main__":
+    main()

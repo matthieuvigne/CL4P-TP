@@ -33,6 +33,10 @@ class Claptrap():
         self.meshcat_viewer = meshcat_viewer 
         self.controller = controller
         
+        import os
+        import claptrap_simu
+        urdf_path = os.path.join(os.path.dirname(claptrap_simu.__file__),'../data/claptrap.urdf')
+        
         self.robot = se3.RobotWrapper.BuildFromURDF("urdf/claptrap.urdf", ["urdf/"], root_joint=None)
         
         # Compute wheel radius vector.
