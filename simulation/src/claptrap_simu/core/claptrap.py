@@ -6,7 +6,7 @@
 #   return tau
 
 
-import pinocchio as se3
+import pinocchio as pnc
 import meshcat
 import numpy as np
 import scipy.integrate
@@ -33,11 +33,12 @@ class Claptrap():
         self.meshcat_viewer = meshcat_viewer 
         self.controller = controller
         
+        # TODO: fix import of URDF !
         import os
         import claptrap_simu
         urdf_path = os.path.join(os.path.dirname(claptrap_simu.__file__),'../data/claptrap.urdf')
         
-        self.robot = se3.RobotWrapper.BuildFromURDF("urdf/claptrap.urdf", ["urdf/"], root_joint=None)
+        self.robot = pnc.RobotWrapper.BuildFromURDF("data/claptrap.urdf", ["data/"], root_joint=None)
         
         # Compute wheel radius vector.
         self.wheel_radius = self.robot.model.jointPlacements[self.robot.model.getJointId("BodyJoint")].translation[2, 0]
@@ -106,17 +107,8 @@ class Claptrap():
         # Write full equation
         A = np.block([[H, J.T], [J, np.zeros((2, 2))]]) 
         b = np.concatenate((torque - g, drift))
-        # Find dv
+        # Find dv, we don't care about the contact forces for now.
         dv = np.linalg.solve(A, b)[:-2]
-        # ~ print(v, dv)
-        # ~ dv = np.linalg.solve(H, torque)[:-3]
-        # ~ dv = np.linalg.solve(H, torque - g)
-        
-        # Now we just need to integrate dv
-        # The slight issue is that q is not a term-by-term integral of v (because of the freeflyer).
-        # Here we use pinocchio's integrate funciton to compute the numerical derivative of q
-        # ~ dt = 1e-6
-        # ~ dq = ((se3.integrate(self.robot.model, q, dt * v) - q)/ dt)
         
         return np.concatenate((v, dv))
     
@@ -132,7 +124,7 @@ class Claptrap():
         # ~ logger.set_vector(prefix + "omega", self.v[3:6, 0])
         logger.set(prefix + "wheelVelocity", self.v[self.robot.model.joints[self.robot.model.getJointId("WheelJoint")].idx_v, 0])
         
-        se3.computeAllTerms(self.robot.model, self.robot.data, self.q, self.v)
+        pnc.computeAllTerms(self.robot.model, self.robot.data, self.q, self.v)
         energy = self.robot.data.kinetic_energy + self.robot.data.potential_energy
         logger.set(prefix + "energy", energy)
         

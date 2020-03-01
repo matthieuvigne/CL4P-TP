@@ -9,7 +9,7 @@ from claptrap_simu.core.claptrap import Claptrap, CLAPTRAP_STATE_SUFFIXES
 from claptrap_simu.log_handling.logger import Logger
 
 # Parameters
-simulation_length = 5.0
+simulation_duration = 5.0
 dt = 0.010
 refresh_rate = 2 # Refresh the display every n itertion.
 
@@ -65,7 +65,7 @@ n_iter = 0
 t = dt
 success = True
 
-while success and t < simulation_length:
+while success and t < simulation_duration:
     success = True
     n_iter = n_iter + 1
     for c in claptraps:
@@ -83,7 +83,7 @@ while success and t < simulation_length:
     logger.set("time", t)
     t += dt
     logger.new_line()
-    sys.stdout.write('Running simulation: {:0.1f}/{}s\r'.format(t, simulation_length))
+    sys.stdout.write('Running simulation: {:0.1f}/{}s\r'.format(t, simulation_duration))
     sys.stdout.flush()
 
 logger.save('/tmp/claptrap_simulation.csv')
