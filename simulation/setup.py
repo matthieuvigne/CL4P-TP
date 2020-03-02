@@ -6,7 +6,7 @@ from setuptools import setup
 
 setup(
     name='claptrap_simu',
-    version='0.0.1',
+    version='0.1.0',
     description='Simulation and log processing for Claptrap',
     long_description=open('README.md').read(),
     packages=['claptrap_simu'],
@@ -15,5 +15,5 @@ setup(
         'console_scripts': ['claptrap_plotter=claptrap_simu.log_handling.plotter:main',
                             'claptrap_replay=claptrap_simu.log_handling.viewer3D:main'],
     },
-    data_files=[('urdf', ['data/claptrap.urdf', 'data/wheel.dae', 'data/body.dae'])],
+    package_data={'claptrap_simu': ['data/*.urdf','data/*.dae']},
     zip_safe=False)

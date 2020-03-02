@@ -9,28 +9,23 @@
 import pinocchio as pnc
 import numpy as np
 import scipy.integrate
-from tqdm import tqdm
+import tqdm
+import pkg_resources
+import os
     
 from ..log_handling.logger import Logger
 
 
 class Claptrap():
-    def __init__(self):
+    def __init__(self, urdf_path = None):
         '''
             Init the robot object.
-            @param controller Controller callback.
-            @param initial_state Optional, initial state as tuple (q0, v0) to start the simulation (position and velocity)
-            @param meshcat_viewer Optional, meshcat viewer. If set, this viewer can be used to display the robots during simulation.
-            @param meshcat_name Optional, if meshcat_viewer is set, name of the robot in the viewer.
-            @param robot_color Optional, if meshcat_viewer is set, color of the robot in the viewer.
+            @param urdf_path Path to URDF (default is to load URDF supplied with this python package)
         '''
+        if urdf_path is None:
+            urdf_path = pkg_resources.resource_filename('claptrap_simu', 'data/claptrap.urdf')
         
-        # TODO: fix import of URDF !
-        import os
-        import claptrap_simu
-        urdf_path = os.path.join(os.path.dirname(claptrap_simu.__file__),'../data/claptrap.urdf')
-        
-        self.robot = pnc.RobotWrapper.BuildFromURDF("data/claptrap.urdf", ["data/"], root_joint=None)
+        self.robot = pnc.RobotWrapper.BuildFromURDF(urdf_path, [os.path.dirname(urdf_path)], root_joint=None)
         
         # Compute wheel radius vector.
         self.wheel_radius = self.robot.model.jointPlacements[self.robot.model.getJointId("BodyJoint")].translation[2, 0]
@@ -98,7 +93,7 @@ class Claptrap():
         logger = Logger(logged_values)
         
         if verbose:
-            pbar = tqdm(total=simulation_duration, bar_format="{percentage:3.0f}%|{bar}| {n:.2f}/{total_fmt} [{elapsed}<{remaining}]")
+            pbar = tqdm.tqdm(total=simulation_duration, bar_format="{percentage:3.0f}%|{bar}| {n:.2f}/{total_fmt} [{elapsed}<{remaining}]")
         
         t = 0
         result_x = []

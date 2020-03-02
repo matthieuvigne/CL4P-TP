@@ -1,4 +1,4 @@
-# simulation
+# Simulation
 
 This folder contains a python simulation for Claptrap control, relying on the open-source
 kinematics and dynamics library ```pinocchio```.
@@ -9,22 +9,37 @@ For more details about the simulation and the applied controllers, see ControlDo
 
 ## Installation
 
-This code depends on the following python packages:
+As usual, install the requirements then the package itself (preferably in a virtual env) using:
 
- - ```pinocchio``` python bindigns, see [github](https://github.com/stack-of-tasks/pinocchio) for installation instructions.
- - ```meshcat```, which can be installed simply using ```pip install --user meshcat```.
+```
+pip install -r requirements.txt
+python setup.py install
+```
+
+This code also depends ```pinocchio``` and its python bindigns, see 
+[github](https://github.com/stack-of-tasks/pinocchio) for installation instructions.
 
 ## Running the simulation
 
-To simply run a simulation, first start the meshcat viewer with the following command
+Example scripts and true simulation scenarios are present in the scenarios folder. For instance, open a meshcat server
+using:
+
 ```
 meshcat-server
 ```
 
-Open a web browser at the given address to visualize a rendering of the simulation. Then in another terminal run
+Then in another terminal run:
 
 ```
-python simulation.py
+python scenarios/example_pd.py
 ```
 
-This outputs a csv log file in the ```/tmp/``` directory, that can be visualized using ```log_plot```.
+This scripts simulates a pure sagittal motion, using a simple PD controller. The results are saved in a log file,
+and then replayed in the meshcat viewer using ```claptrap_replay```. Note that this tool can be called from the command
+line:
+
+```
+claptrap_replay /path/to/log.csv
+```
+
+For analysis, see ```claptrap_plotter``` for a generic plotter of a CSV file.

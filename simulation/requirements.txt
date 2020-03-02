@@ -1,0 +1,7 @@
+numpy
+matplotlib
+scipy
+slycot
+control
+tqdm
+meshcat

@@ -10,6 +10,8 @@ import meshcat
 import numpy as np
 import pinocchio as pnc
 import matplotlib.colors as colors
+import pkg_resources
+import os
 
 from .log_loader import LogLoader
 
@@ -19,10 +21,13 @@ def display_3d(files):
     Display specified logfiles in Meshcat. Color of each file is picked from Matplotlib default color cycle
     @param files List of files to display.
     '''
+    # Load default URDF.
+    urdf_path = pkg_resources.resource_filename('claptrap_simu', 'data/claptrap.urdf')
+        
     display_robots = []
     for f in files:
         # Create robot for this file
-        robot = pnc.RobotWrapper.BuildFromURDF("data/claptrap.urdf", ["data/"], root_joint=None)
+        robot = pnc.RobotWrapper.BuildFromURDF(urdf_path, [os.path.dirname(urdf_path)], root_joint=None)
         
         # Load file data
         log = LogLoader(f)

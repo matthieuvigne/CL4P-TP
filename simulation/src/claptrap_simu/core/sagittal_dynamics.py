@@ -6,6 +6,7 @@
 
 import numpy as np
 import scipy.integrate
+import pkg_resources
 
 import pinocchio as pnc
 
@@ -13,7 +14,7 @@ import pinocchio as pnc
 class ClaptrapSagittalDynamics():
     '''  Exact and linearized dynamics of a Segway in the sagittal plane
     '''
-    def __init__(self, urdf_path="data/claptrap.urdf"):
+    def __init__(self, urdf_path=None):
         ''' Constructor
         '''
         # Get parameters from the URDF.
