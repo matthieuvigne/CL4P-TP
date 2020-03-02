@@ -2,26 +2,20 @@
 # This class runs a simulation of Claptrap using pinocchio, given a controller as input.
 
 # A controller is defined by the following signature:
-# def controller(t, q, v, q_ref, v_ref, a_ref):
+# def controller(t, q, v):
 #   return tau
 
 
 import pinocchio as pnc
-import meshcat
 import numpy as np
 import scipy.integrate
+from tqdm import tqdm
+    
+from ..log_handling.logger import Logger
 
-# Suffix used when logging the state
-CLAPTRAP_STATE_SUFFIXES = ["roll", "pitch", "yaw"] + \
-                          ["baseX", "baseY", "baseZ"] + \
-                          ["omegaX", "omegaY", "omegaZ"] + \
-                          ["wheelVelocity", "energy", "wheelTorque"]
-
-def skew_symmetric(v):
-    return np.matrix([[0, -v[2,0], v[1,0]], [v[2,0], 0, -v[0, 0]], [-v[1, 0], v[0, 0], 0]])
 
 class Claptrap():
-    def __init__(self, controller, initial_state = None, meshcat_viewer = None, meshcat_name = "claptrap", robot_color = None):
+    def __init__(self):
         '''
             Init the robot object.
             @param controller Controller callback.
@@ -30,8 +24,6 @@ class Claptrap():
             @param meshcat_name Optional, if meshcat_viewer is set, name of the robot in the viewer.
             @param robot_color Optional, if meshcat_viewer is set, color of the robot in the viewer.
         '''
-        self.meshcat_viewer = meshcat_viewer 
-        self.controller = controller
         
         # TODO: fix import of URDF !
         import os
@@ -43,39 +35,8 @@ class Claptrap():
         # Compute wheel radius vector.
         self.wheel_radius = self.robot.model.jointPlacements[self.robot.model.getJointId("BodyJoint")].translation[2, 0]
         
-        # Current robot state
-        if initial_state is not None:
-            self.q = initial_state[0]
-            self.v = initial_state[1]
-        else:
-            self.q = self.robot.q0
-            self.v = np.matrix(np.zeros((self.robot.nv, 1)))
-            
-        # Initialize viewer if needed.
-        if self.meshcat_viewer is not None:
-            self.robot.initMeshcatDisplay(self.meshcat_viewer, meshcat_name, robot_color)
-            self.robot.display(self.robot.q0)
-        
-        # Create integrator.
-        self.solver = scipy.integrate.ode(self.dynamics)
-        self.solver.set_integrator('dopri5')
-        self.solver.set_initial_value(np.concatenate((self.q, self.v)))
     
-    
-    def integrate(self, t):
-        ''' Integrate simulation up to time t'''
-        # Run integration
-        self.solver.integrate(t)
-        # Extract data from solver
-        self.q = np.matrix(self.solver.y[:self.robot.nq])
-        # Renormalize quaternion to prevent propagation of rounding errors due to integration.
-        # ~ self.q[3:7, 0] /= np.linalg.norm(self.q[3:7, 0])
-        self.v = np.matrix(self.solver.y[self.robot.nq:])
-        self.tau = self.controller(t, self.q, self.v, None, None, None)
-        return self.solver.successful()
-    
-    
-    def dynamics(self, t, x):
+    def _dynamics(self, t, x):
         ''' Forward dynamics of the robot, to integrate
         '''
         # Split input as (q, v) pair
@@ -103,7 +64,7 @@ class Claptrap():
         # Compute controller torque
         torque = np.zeros((self.robot.model.nv, 1))
 
-        torque[5, 0] = self.controller(t, q, v, None, None, None)
+        torque[5, 0] = self.controller(t, q, v)
         # Write full equation
         A = np.block([[H, J.T], [J, np.zeros((2, 2))]]) 
         b = np.concatenate((torque - g, drift))
@@ -112,24 +73,82 @@ class Claptrap():
         
         return np.concatenate((v, dv))
     
-    def log_state(self, logger, prefix):
-        '''Log current state: the values logged are defined in CLAPTRAP_STATE_SUFFIXES
-        @param logger Logger object
-        @param prefix Prefix to add before each suffix.
+    
+    def simulate(self, x0, simulation_duration, dt, motor_control_law, output_name = "/tmp/claptrap.csv", verbose = True):
+        ''' Run a simulation of given controller motor_control_law, log the results, and return the state.
+            @param x0 Initial state (position + velocity)
+            @param simulation_duration Length of the simulation
+            @param dt Timestep for logger - note that the controller is simulated in a continuous manner
+            @param motor_control_law Motor callback law, with signature motor_control_law(t, q, v) -> torque
+            @param output_name Optional, name of the output log file.
+            @param verbose Optional, whether or not to display a progress bar during simulation.
         '''
-        logger.set(prefix + "roll", self.q[3, 0])
-        logger.set(prefix + "pitch", self.q[4,0])
-        logger.set(prefix + "yaw", self.q[2, 0])
-        # TODO
-        # ~ logger.set_vector(prefix + "omega", self.v[3:6, 0])
-        logger.set(prefix + "wheelVelocity", self.v[self.robot.model.joints[self.robot.model.getJointId("WheelJoint")].idx_v, 0])
+        self.controller = motor_control_law
         
-        pnc.computeAllTerms(self.robot.model, self.robot.data, self.q, self.v)
-        energy = self.robot.data.kinetic_energy + self.robot.data.potential_energy
-        logger.set(prefix + "energy", energy)
+        # Create integrator.
+        solver = scipy.integrate.ode(self._dynamics)
+        solver.set_integrator('dopri5')
+        solver.set_initial_value(x0)
         
-        logger.set(prefix + "wheelTorque", self.tau[0, 0])
+        # Create logger
+        logged_values = ["Claptrap.q" + str(i) for i in range(self.robot.model.nq)] + \
+                        ["Claptrap.v" + str(i) for i in range(self.robot.model.nv)] + \
+                        ["Claptrap.energy"]
+                        
+        logger = Logger(logged_values)
         
-        w_M_base = self.robot.framePosition(self.q, self.robot.model.getFrameId("Body"), False)
-        logger.set_vector(prefix + "base", w_M_base.translation)
+        if verbose:
+            pbar = tqdm(total=simulation_duration, bar_format="{percentage:3.0f}%|{bar}| {n:.2f}/{total_fmt} [{elapsed}<{remaining}]")
+        
+        t = 0
+        result_x = []
+        while solver.successful() and t < simulation_duration:
+            if verbose:
+                pbar.update(dt)
+            # Integrate, skip first iteration, we only want to log in this case
+            if t > 0:
+                solver.integrate(t)
+            
+            result_x.append(solver.y)
+            q = np.matrix(solver.y[:self.robot.nq])
+            v = np.matrix(solver.y[self.robot.nq:])
+        
+            # Log
+            for i in range(self.robot.model.nq):
+                logger.set("Claptrap.q" + str(i), q[i, 0])
+            for i in range(self.robot.model.nv):
+                logger.set("Claptrap.v" + str(i), v[i, 0])
+            pnc.computeAllTerms(self.robot.model, self.robot.data, q, v)
+            energy = self.robot.data.kinetic_energy + self.robot.data.potential_energy
+            logger.set("Claptrap.energy", energy)
+            logger.set("time", t)
+            logger.new_line()
+            
+            t += dt
+            
+        
+        logger.save(output_name)
+        # Return time and x
+        return logger.data["time"][:-1], np.array(result_x)
+   
+    
+    # ~ def log_state(self, logger, prefix):
+        # ~ '''Log current state: the values logged are defined in CLAPTRAP_STATE_SUFFIXES
+        # ~ @param logger Logger object
+        # ~ @param prefix Prefix to add before each suffix.
+        # ~ '''
+        # ~ logger.set(prefix + "roll", self.q[3, 0])
+        # ~ logger.set(prefix + "pitch", self.q[4,0])
+        # ~ logger.set(prefix + "yaw", self.q[2, 0])
+        # ~ # TODO
+        # ~ logger.set(prefix + "wheelVelocity", self.v[self.robot.model.joints[self.robot.model.getJointId("WheelJoint")].idx_v, 0])
+        
+        # ~ pnc.computeAllTerms(self.robot.model, self.robot.data, self.q, self.v)
+        # ~ energy = self.robot.data.kinetic_energy + self.robot.data.potential_energy
+        # ~ logger.set(prefix + "energy", energy)
+        
+        # ~ logger.set(prefix + "wheelTorque", self.tau[0, 0])
+        
+        # ~ w_M_base = self.robot.framePosition(self.q, self.robot.model.getFrameId("Body"), False)
+        # ~ logger.set_vector(prefix + "base", w_M_base.translation)
         
