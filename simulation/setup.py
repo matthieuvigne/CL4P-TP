@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-from setuptools import setup
+from setuptools import setup, find_packages
 
 
 setup(
@@ -9,8 +9,8 @@ setup(
     version='0.1.0',
     description='Simulation and log processing for Claptrap',
     long_description=open('README.md').read(),
-    packages=['claptrap_simu'],
-    package_dir={'': 'src'},
+    packages=find_packages('src'),
+    package_dir={'':'src'},
     entry_points = {
         'console_scripts': ['claptrap_plotter=claptrap_simu.log_handling.plotter:main',
                             'claptrap_replay=claptrap_simu.log_handling.viewer3D:main'],

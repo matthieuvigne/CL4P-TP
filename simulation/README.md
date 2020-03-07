@@ -31,7 +31,7 @@ meshcat-server
 Then in another terminal run:
 
 ```
-python scenarios/example_pd.py
+python scenarios/example_sagittal.py
 ```
 
 This scripts simulates a pure sagittal motion, using a simple PD controller. The results are saved in a log file,
