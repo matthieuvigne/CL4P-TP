@@ -7,6 +7,7 @@
 import numpy as np
 import scipy.integrate
 import pkg_resources
+import matplotlib.pyplot as plt
 
 import pinocchio as pnc
 
@@ -68,7 +69,7 @@ class ClaptrapSagittalDynamics():
             tau[1] = self.motor_control_law(t, x)
 
         # Solve for acceleration
-        ddq = np.linalg.solve(H, nle - tau)
+        ddq = np.linalg.solve(H, nle + tau)
 
         dx = np.array([dtheta, dphi, ddq[0], ddq[1], self.r * (dtheta + dphi)])
         return dx
@@ -78,9 +79,19 @@ class ClaptrapSagittalDynamics():
         @param x0 Initial point.
         @param dt Sampling period of output.
         @param simulation_duration Duration to simulate
-        @param motor_control_law Optional, callback with signature motor_control_law(t, x) -> float
+        @param motor_control_law Optional, callback with signature motor_control_law(t, x) -> float 
+                                 or a np.array for linear controller (in which case the callback is - K x)
         '''
-        self.motor_control_law = motor_control_law
+        if isinstance(motor_control_law, np.ndarray):
+            def motor_callback(t, x):
+                return -(motor_control_law @ x[:4])[0]
+            self.motor_control_law = motor_callback
+        else:
+            self.motor_control_law = motor_control_law
+        
+        if len(x0) == 4:
+            # Add x coordinate if not present
+            x0 = np.concatenate((x0 , np.zeros(1)))
 
         solver = scipy.integrate.ode(self.nonlinear_dynamics)
         solver.set_integrator('dopri5')
@@ -88,6 +99,7 @@ class ClaptrapSagittalDynamics():
 
         time = [0.0]
         x = [x0]
+        torque = [0]
         t = dt
         while solver.successful() and t < simulation_duration:
             # Integrate for dt
@@ -95,8 +107,81 @@ class ClaptrapSagittalDynamics():
             # Save result
             time.append(t)
             x.append(solver.y)
+            torque.append(self.motor_control_law(t, solver.y))
             t += dt
 
-        return time, x
-
-
+        return time, x, torque
+    
+    def get_linear_system_matrices(self):
+        ''' 
+        @brief Return A, B, the linear matrices linked to this system (for simulation or gain tuning).
+        '''
+        H_inv = np.linalg.inv(self.compute_inertia_matrix(0))
+        A = np.array([[0,                                     0, 1, 0],
+                      [0,                                     0, 0, 1],
+                      [H_inv[0,0] * self.m * self.l * self.g, 0, 0, 0],
+                      [H_inv[1 ,0] * self.m * self.l * self.g, 0, 0, 0]])
+        B = np.array([[0],
+                      [0],
+                      [H_inv[0, 1]],
+                      [H_inv[1,1]]])
+        return A, B
+    
+    def run_linear_simulation(self, x0, dt, simulation_duration, K):
+        ''' Run a simulation with the linear model, and a linear controller.
+        @param x0 Initial point.
+        @param dt Sampling period of output.
+        @param simulation_duration Duration to simulate
+        @param K Controller gain (row matrix)
+        '''
+        
+        # Compute close-loop matrix
+        A, B = self.get_linear_system_matrices()
+        M = A - B @ K
+        
+        # Compue analytical solution
+        time = np.arange(0, simulation_duration, dt)
+        x = [scipy.linalg.expm(M * t) @ x0 for t in time]
+        
+        return time, x, [- (K @ v)[0] for v in x]
+    
+    def plot(self, solutions, legends):
+        ''' Plot the results of several simulations on the same figure.
+        @param times List of timestamps for each simulation.
+        @param solutions List of tuples (time, state, torque) returned by the various itne List of states for each simulation.
+        @param torques List of motor torque for each simulation.
+        @param legends Legend.
+        '''
+        # Extract time, state, command from input tuple
+        times = [s[0] for s in solutions]
+        states = [np.array(s[1]) for s in solutions]
+        torques = [s[2] for s in solutions]
+        
+        ax1 = plt.subplot(221)
+        plt.title("Body angle")
+        for i in range(len(times)):
+            plt.plot(times[i], states[i][:, 0], label = legends[i])
+        plt.legend()
+        plt.grid()
+        
+        plt.subplot(222, sharex = ax1)
+        plt.title("Total wheel rotation")
+        for i in range(len(times)):
+            plt.plot(times[i], states[i][:, 0] + states[i][:, 1], label = legends[i])
+        plt.legend()
+        plt.grid()
+        
+        plt.subplot(223, sharex = ax1)
+        plt.title("Body velocity")
+        for i in range(len(times)):
+            plt.plot(times[i], states[i][:, 2], label = legends[i])
+        plt.legend()
+        plt.grid()
+        
+        plt.subplot(224, sharex = ax1)
+        plt.title("Torque")
+        for i in range(len(times)):
+            plt.plot(times[i], torques[i], label = legends[i])
+        plt.legend()
+        plt.grid()
+        plt.show()

@@ -4,8 +4,6 @@
 # A controller is defined by the following signature:
 # def controller(t, q, v):
 #   return tau
-
-
 import pinocchio as pnc
 import numpy as np
 import scipy.integrate

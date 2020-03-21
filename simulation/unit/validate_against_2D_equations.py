@@ -16,17 +16,17 @@ def claptrap_pd(t, q, v):
     pitch = q[4]
     dpitch = v[4]
 
-    u = - Kp * (pitch + Kd * dpitch )
-    return -u
+    u = Kp * (pitch + Kd * dpitch )
+    return u
 
 def analytical_pd(t, x):
     theta = x[0]
     dtheta = x[2]
-    return  - Kp * (theta + Kd * dtheta )
+    return  Kp * (theta + Kd * dtheta )
 
 if __name__ == "__main__":
     # Parameters
-    simulation_duration = 0.1
+    simulation_duration = 1.0
     dt = 0.010
 
     # Initial state
@@ -50,7 +50,7 @@ if __name__ == "__main__":
 
     # Run 2D simulation.
     analytical_simulator = ClaptrapSagittalDynamics()
-    t_analytical, x_analytical = analytical_simulator.run_nonlinear_simulation(x0, dt, simulation_duration, motor_control_law = analytical_pd)
+    t_analytical, x_analytical, _ = analytical_simulator.run_nonlinear_simulation(x0, dt, simulation_duration, motor_control_law = analytical_pd)
 
     # Compare results
     assert (t_claptrap == t_analytical)
